@@ -21,7 +21,6 @@ import time
 import hmac
 import hashlib
 import re
-import socket
 import threading
 import uuid
 import signal
@@ -721,47 +720,6 @@ def handle_semantic_chunking(text: str, max_chunk_tokens: int) -> Dict[str, Any]
         "chunks": chunks,
         "total_chunks": len(chunks),
         "engine": "local-chunker-v2"
-    }
-
-
-def probe_network_capability() -> Dict[str, Any]:
-    """Test actual network restrictions from the sidecar process."""
-    dns_blocked = True
-    tcp_blocked = True
-    udp_blocked = True
-
-    # 1. Test DNS
-    try:
-        socket.gethostbyname("dns.google")
-        dns_blocked = False
-    except Exception:
-        dns_blocked = True
-
-    # 2. Test TCP connect
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(0.5)
-        s.connect(("8.8.8.8", 53))
-        s.close()
-        tcp_blocked = False
-    except Exception:
-        tcp_blocked = True
-
-    # 3. Test UDP
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(0.5)
-        s.sendto(b"test", ("8.8.8.8", 53))
-    except Exception:
-        udp_blocked = True
-
-    os_isolated = os.environ.get("WATERMARKLAB_NETWORK_ISOLATED") == "1"
-    return {
-        "dns_blocked": dns_blocked,
-        "tcp_blocked": tcp_blocked,
-        "udp_blocked": udp_blocked,
-        "os_network_isolated": os_isolated,
-        "is_offline": os_isolated and dns_blocked and tcp_blocked and udp_blocked
     }
 
 
