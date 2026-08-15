@@ -1,0 +1,6 @@
+{
+  "name": "WatermarkLab",
+  "description": "Privacy-first desktop application for offline local text transformation, paraphrasing, translation loops, and semantic validation with authenticated IPC and encrypted storage.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

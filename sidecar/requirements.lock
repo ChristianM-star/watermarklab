@@ -1,0 +1,12 @@
+# WatermarkLab Offline AI Sidecar Locked Dependencies
+# Minimal, fully offline-compatible runtime dependencies
+# No cloud telemetry, no analytics, no remote model downloading
+argon2-cffi==23.1.0
+cryptography==42.0.5
+numpy==1.26.4
+onnxruntime==1.17.3
+torch==2.2.2
+transformers==4.39.3
+sentencepiece==0.2.0
+protobuf==4.25.3
+pydantic==2.6.4

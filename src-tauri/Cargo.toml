@@ -1,0 +1,26 @@
+[package]
+name = "watermarklab"
+version = "0.1.0"
+description = "WatermarkLab Privacy-First Text Transformation Platform"
+authors = ["WatermarkLab Security Engineering Team"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2.0.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0.0", features = [] }
+tauri-plugin-shell = "2.0.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.36", features = ["full"] }
+argon2 = { version = "0.5", features = ["std"] }
+aes-gcm = "0.10"
+sha2 = "0.10"
+rand = "0.8"
+base64 = "0.22"
+hex = "0.4"
+uuid = { version = "1.8", features = ["v4", "serde"] }
+parking_lot = "0.12"
+thiserror = "1.0"
+zeroize = { version = "1.7", features = ["derive", "zeroize_derive"] }

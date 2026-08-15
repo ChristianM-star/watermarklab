@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/v2/tooling/cli/schema.json",
+  "identifier": "default",
+  "description": "Strict default capabilities for WatermarkLab desktop window",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}
