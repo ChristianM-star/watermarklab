@@ -63,10 +63,28 @@ export class IPCBridgeService {
 
     try {
       const invoke = (window as any).__TAURI_INTERNALS__.invoke;
-      const nativeOperation = operation === 'verify_model' ? 'verify_model' : 'transform_text';
-      const nativeArgs = nativeOperation === 'verify_model'
-        ? payload
-        : { operation, payload };
+      let nativeOperation = 'transform_text';
+      let nativeArgs: unknown = { operation, payload };
+
+      // Route model-related operations to their dedicated Tauri commands
+      switch (operation) {
+        case 'load_model':
+        case 'unload_model':
+        case 'model_status':
+        case 'list_models':
+        case 'get_resource_usage':
+        case 'verify_model':
+          nativeOperation = operation;
+          nativeArgs = payload;
+          break;
+        case 'import_model':
+          nativeOperation = 'import_model';
+          nativeArgs = payload;
+          break;
+        default:
+          nativeOperation = 'transform_text';
+          nativeArgs = { operation, payload };
+      }
 
       const result = await Promise.race([
         invoke(nativeOperation, nativeArgs),

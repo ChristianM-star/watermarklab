@@ -5,318 +5,152 @@ import {
   TranslateLoopResult,
   SemanticChunkPayload,
   SemanticChunkResult,
-  TextChunk,
+  SemanticValidationReport,
 } from '../types/transformation';
-import { validateTransformation } from './semanticValidator';
-import { extractCodeSnippets, extractNumbers, extractUrls } from './semanticValidator';
+import { ipcBridge } from './ipcBridge';
 
 /**
- * Local Deterministic NLP Transformation Engine
- * Strictly offline-first. Never makes remote calls.
- * Preserves numbers, code, URLs, and named entities.
+ * Convert sidecar validation payload to the frontend SemanticValidationReport format
  */
-
-// Lexical mapping tables for style variations
-const ACADEMIC_REPLACEMENTS: Record<string, string> = {
-  'shows': 'demonstrates',
-  'show': 'demonstrate',
-  'find out': 'determine',
-  'lots of': 'a substantial quantity of',
-  'big': 'significant',
-  'make sure': 'ensure',
-  'good': 'advantageous',
-  'bad': 'detrimental',
-  'help': 'facilitate',
-  'helps': 'facilitates',
-  'use': 'utilize',
-  'uses': 'utilizes',
-  'used': 'utilized',
-  'get': 'obtain',
-  'gets': 'obtains',
-  'got': 'obtained',
-  'about': 'approximately',
-  'look into': 'investigate',
-  'clear': 'apparent',
-  'hard': 'challenging',
-  'think': 'hypothesize',
-  'way': 'methodology',
-  'needs': 'requires',
-  'needed': 'required',
-  'very': 'substantially',
-  'started': 'initiated',
-  'start': 'initiate',
-  'stop': 'terminate',
-  'fix': 'rectify',
-  'give': 'provide',
-  'gives': 'provides',
-  'gave': 'provided',
-  'keep': 'maintain',
-  'change': 'modify',
-  'changes': 'modifications',
-  'check': 'verify',
-  'checks': 'verifies',
-};
-
-const CONCISE_REPLACEMENTS: Record<string, string> = {
-  'in order to': 'to',
-  'due to the fact that': 'because',
-  'at the present time': 'currently',
-  'for the purpose of': 'to',
-  'in the event that': 'if',
-  'with the exception of': 'except',
-  'a large number of': 'many',
-  'is able to': 'can',
-  'has the ability to': 'can',
-  'it is important to note that': 'notably,',
-  'as a matter of fact': 'in fact,',
-  'take into consideration': 'consider',
-  'make a decision': 'decide',
-  'conduct an investigation': 'investigate',
-  'give consideration to': 'consider',
-};
-
-const FORMAL_REPLACEMENTS: Record<string, string> = {
-  'maybe': 'perhaps',
-  'also': 'furthermore',
-  'so': 'consequently',
-  'but': 'however',
-  'and': 'in addition',
-  'like': 'such as',
-  'anyway': 'nevertheless',
-  'plus': 'moreover',
-  'lots': 'numerous',
-  'kids': 'children',
-  'guy': 'individual',
-  'buy': 'purchase',
-  'ask': 'inquire',
-  'tell': 'inform',
-};
-
-const CREATIVE_REPLACEMENTS: Record<string, string> = {
-  'fast': 'swiftly',
-  'slow': 'gradual',
-  'bright': 'luminous',
-  'dark': 'shadowed',
-  'important': 'pivotal',
-  'new': 'novel',
-  'old': 'enduring',
-  'great': 'exceptional',
-  'problem': 'quandary',
-  'beautiful': 'striking',
-  'create': 'forge',
-  'built': 'engineered',
-};
-
-// Protect code blocks, urls, and numbers by replacing with unique tokens before transformation
-function protectTokens(text: string): {
-  protectedText: string;
-  tokenMap: Map<string, string>;
-} {
-  const tokenMap = new Map<string, string>();
-  let count = 0;
-  let result = text;
-
-  // 1. Protect code blocks ```...``` and `...`
-  const codeSnippets = extractCodeSnippets(text);
-  for (const snippet of codeSnippets) {
-    const token = `__PROTECTED_CODE_${count++}__`;
-    tokenMap.set(token, snippet);
-    result = result.split(snippet).join(token);
-  }
-
-  // 2. Protect URLs
-  const urls = extractUrls(result);
-  for (const url of urls) {
-    const token = `__PROTECTED_URL_${count++}__`;
-    tokenMap.set(token, url);
-    result = result.split(url).join(token);
-  }
-
-  // 3. Protect specific numbers with units/currency
-  const numbers = extractNumbers(result);
-  for (const num of numbers) {
-    const token = `__PROTECTED_NUM_${count++}__`;
-    tokenMap.set(token, num);
-    result = result.split(num).join(token);
-  }
-
-  return { protectedText: result, tokenMap };
-}
-
-function restoreTokens(text: string, tokenMap: Map<string, string>): string {
-  let result = text;
-  for (const [token, originalVal] of tokenMap.entries()) {
-    result = result.split(token).join(originalVal);
-  }
-  return result;
-}
-
-// Paraphrase sentences while strictly preserving protected tokens
-export function paraphraseText(payload: ParaphrasePayload, modelId = 'llama-3-paraphrase-8b-q4'): ParaphraseResult {
-  const startTime = performance.now();
-  const { text, style, intensity, preserveNumbers, preserveCode, preserveUrls, preserveEntities } = payload;
-
-  if (!text || text.trim() === '') {
+function convertSidecarValidation(raw: any): SemanticValidationReport {
+  if (!raw) {
     return {
-      originalText: '',
-      rewrittenText: '',
-      similarityScore: 1.0,
-      validation: validateTransformation('', ''),
-      tokenCountOriginal: 0,
-      tokenCountTransformed: 0,
-      processingTimeMs: 0,
-      modelIdUsed: modelId,
+      isValid: false,
+      numbersPreserved: false,
+      codePreserved: false,
+      urlsPreserved: false,
+      namedEntitiesPreserved: false,
+      structuralPreserved: false,
+      lengthRatio: 1,
+      lexicalOverlapScore: 0,
+      similarityScore: 0,
+      entitiesDetectedByValidatorV1: [],
+      items: [],
+      violations: ['Validation report missing from sidecar'],
     };
   }
 
-  const { protectedText, tokenMap } = protectTokens(text);
+  const violations: string[] = (raw.violations || []).map((v: any) =>
+    typeof v === 'string' ? v : `${v.type}: ${v.details}`
+  );
 
-  let replacementMap: Record<string, string>;
-  switch (style) {
-    case 'academic':
-      replacementMap = { ...ACADEMIC_REPLACEMENTS, ...CONCISE_REPLACEMENTS };
-      break;
-    case 'concise':
-      replacementMap = { ...CONCISE_REPLACEMENTS, ...ACADEMIC_REPLACEMENTS };
-      break;
-    case 'formal':
-      replacementMap = { ...FORMAL_REPLACEMENTS, ...ACADEMIC_REPLACEMENTS };
-      break;
-    case 'creative':
-      replacementMap = { ...CREATIVE_REPLACEMENTS, ...FORMAL_REPLACEMENTS };
-      break;
-    case 'natural':
-    default:
-      replacementMap = { ...ACADEMIC_REPLACEMENTS, ...FORMAL_REPLACEMENTS, ...CONCISE_REPLACEMENTS };
-      break;
+  return {
+    isValid: raw.status === 'PASS',
+    numbersPreserved: !violations.some(v => v.includes('NUMBER_CHANGED')),
+    codePreserved: !violations.some(v => v.includes('CODE_MODIFIED')),
+    urlsPreserved: !violations.some(v => v.includes('URL_CHANGED')),
+    namedEntitiesPreserved: !violations.some(v => v.includes('ENTITY_CHANGED') || v.includes('IDENTIFIER_CHANGED')),
+    structuralPreserved: !violations.some(v => v.includes('STRUCTURAL_CORRUPTION')),
+    lengthRatio: raw.length_ratio ?? 1,
+    lexicalOverlapScore: raw.lexical_overlap_score ?? 0,
+    similarityScore: raw.lexical_overlap_score ?? 0,
+    entitiesDetectedByValidatorV1: [],
+    items: [],
+    violations,
+  };
+}
+
+/**
+ * NLP Transformation Engine (Stage 2)
+ * All inference routes through Rust → Python local model runtime.
+ * No deterministic word-replacement dictionaries in production mode.
+ */
+
+/**
+ * Paraphrase via the local model runtime.
+ * Returns ParaphraseResult with independent validation from the sidecar.
+ */
+export async function paraphraseText(
+  payload: ParaphrasePayload,
+  modelId = '',
+  modelSha256 = '',
+  modelVersion = '',
+): Promise<ParaphraseResult> {
+  const startTime = performance.now();
+  const result = await ipcBridge.send<ParaphrasePayload & { model_id: string; model_sha256: string; model_version: string }, any>(
+    'paraphrase',
+    {
+      ...payload,
+      model_id: modelId,
+      model_sha256: modelSha256,
+      model_version: modelVersion,
+    },
+  );
+
+  if (!result.ok) {
+    throw new Error(result.error?.message || 'Paraphrase failed');
   }
 
-  // Process sentence by sentence
-  const sentences = protectedText.split(/([.!?]+\s+)/);
-  const transformedSentences = sentences.map((part, idx) => {
-    // If it's punctuation delimiter, preserve
-    if (idx % 2 === 1) return part;
-    let s = part;
-
-    // Apply phrase replacements
-    for (const [from, to] of Object.entries(replacementMap)) {
-      const regex = new RegExp(`\\b${from}\\b`, 'gi');
-      s = s.replace(regex, (match) => {
-        // preserve case
-        if (match[0] === match[0].toUpperCase()) {
-          return to.charAt(0).toUpperCase() + to.slice(1);
-        }
-        return to;
-      });
-    }
-
-    // Structural reorganization for higher intensity
-    if (intensity >= 3) {
-      if (s.toLowerCase().startsWith('because ') && s.includes(',')) {
-        const parts = s.split(',');
-        if (parts.length === 2) {
-          s = `${parts[1].trim()} ${parts[0].trim()}`;
-        }
-      } else if (s.includes(' which is ') && intensity >= 4) {
-        s = s.replace(' which is ', ', specifically ');
-      } else if (s.includes(' in order to ') && intensity >= 2) {
-        s = s.replace(' in order to ', ' so as to ');
-      }
-    }
-
-    return s;
-  });
-
-  const rawRewritten = transformedSentences.join('');
-  const restoredText = restoreTokens(rawRewritten, tokenMap);
-
-  const validation = validateTransformation(text, restoredText, {
-    preserveNumbers,
-    preserveCode,
-    preserveUrls,
-    preserveEntities,
-  });
-
+  const data = result.result;
+  const rawValidation = data.validation;
+  const validation = convertSidecarValidation(rawValidation);
   const processingTimeMs = Math.round(performance.now() - startTime);
 
   return {
-    originalText: text,
-    rewrittenText: restoredText,
+    originalText: payload.text,
+    rewrittenText: data.transformed_text,
     similarityScore: validation.similarityScore,
     validation,
-    tokenCountOriginal: Math.ceil(text.split(/\s+/).length * 1.3),
-    tokenCountTransformed: Math.ceil(restoredText.split(/\s+/).length * 1.3),
+    tokenCountOriginal: Math.ceil(payload.text.split(/\s+/).length * 1.3),
+    tokenCountTransformed: Math.ceil((data.transformed_text || '').split(/\s+/).length * 1.3),
     processingTimeMs,
     modelIdUsed: modelId,
   };
 }
 
-// Multi-hop translation loop (e.g. English -> French -> English)
-export function runTranslationLoop(
+/**
+ * Multi-hop translation loop through the local model runtime
+ * Supports EN → FR → EN and EN → FR → DE → EN
+ */
+export async function runTranslationLoop(
   payload: TranslateLoopPayload,
-  modelId = 'nllb-200-distilled-600m'
-): TranslateLoopResult {
+  modelId = '',
+  modelSha256?: string,
+  modelVersion?: string,
+): Promise<TranslateLoopResult> {
   const startTime = performance.now();
-  const { text, intermediateLang, roundtripHops } = payload;
 
-  const { protectedText, tokenMap } = protectTokens(text);
+  const result = await ipcBridge.send<
+    TranslateLoopPayload & {
+      model_id: string;
+      model_sha256: string;
+      model_version: string;
+      source_lang: string;
+      intermediate_lang: string;
+      target_lang: string;
+      roundtrip_hops: number;
+    },
+    any
+  >(
+    'translate_loop',
+    {
+      ...payload,
+      model_id: modelId,
+      model_sha256: modelSha256 || '',
+      model_version: modelVersion || '',
+      source_lang: payload.sourceLang,
+      intermediate_lang: payload.intermediateLang,
+      target_lang: payload.targetLang,
+      roundtrip_hops: payload.roundtripHops,
+    },
+  );
 
-  // High-fidelity French intermediate mapping
-  const intermediateTexts: Array<{ lang: string; text: string }> = [];
-
-  let frenchIntermediate = protectedText
-    .replace(/\bthe\b/gi, 'le')
-    .replace(/\bsoftware\b/gi, 'logiciel')
-    .replace(/\bapplication\b/gi, 'application')
-    .replace(/\bsecurity\b/gi, 'sécurité')
-    .replace(/\bdatabase\b/gi, 'base de données')
-    .replace(/\bnetwork\b/gi, 'réseau')
-    .replace(/\bprocess\b/gi, 'processus')
-    .replace(/\bencrypted\b/gi, 'chiffré')
-    .replace(/\bmemory\b/gi, 'mémoire')
-    .replace(/\btransformation\b/gi, 'transformation')
-    .replace(/\bpreserved\b/gi, 'conservé')
-    .replace(/\bdeterministic\b/gi, 'déterministe');
-
-  intermediateTexts.push({
-    lang: intermediateLang.toUpperCase(),
-    text: restoreTokens(frenchIntermediate, tokenMap),
-  });
-
-  if (roundtripHops === 2) {
-    let germanIntermediate = frenchIntermediate
-      .replace(/\ble\b/gi, 'die')
-      .replace(/\blogiciel\b/gi, 'Software')
-      .replace(/\bsécurité\b/gi, 'Sicherheit')
-      .replace(/\bréseau\b/gi, 'Netzwerk')
-      .replace(/\bchiffré\b/gi, 'verschlüsselt');
-
-    intermediateTexts.push({
-      lang: 'DE',
-      text: restoreTokens(germanIntermediate, tokenMap),
-    });
+  if (!result.ok) {
+    throw new Error(result.error?.message || 'Translation loop failed');
   }
 
-  // Back-translation to English with idiomatic roundtrip nuances
-  let backTranslated = protectedText
-    .replace(/\bsoftware application\b/gi, 'software program')
-    .replace(/\bdata storage\b/gi, 'data repository')
-    .replace(/\bsecure storage\b/gi, 'encrypted storage repository')
-    .replace(/\bguarantees\b/gi, 'ensures')
-    .replace(/\butilizes\b/gi, 'employs')
-    .replace(/\bperforms\b/gi, 'executes')
-    .replace(/\ballows\b/gi, 'enables')
-    .replace(/\brequires\b/gi, 'demands')
-    .replace(/\bis designed to\b/gi, 'aims to');
-
-  const finalText = restoreTokens(backTranslated, tokenMap);
-  const validation = validateTransformation(text, finalText);
+  const data = result.result;
+  const rawValidation = data.validation;
+  const validation = convertSidecarValidation(rawValidation);
   const processingTimeMs = Math.round(performance.now() - startTime);
 
   return {
-    originalText: text,
-    intermediateTexts,
-    finalText,
+    originalText: data.original || payload.text,
+    intermediateTexts: (data.hops || []).map((hop: any) => ({
+      lang: hop.target_language.toUpperCase(),
+      text: hop.text,
+    })),
+    finalText: data.final,
     roundtripSimilarity: validation.similarityScore,
     validation,
     processingTimeMs,
@@ -324,19 +158,21 @@ export function runTranslationLoop(
   };
 }
 
-// Semantic Chunking Engine
+/**
+ * Semantic chunking is a non-model utility and remains local.
+ */
 export function chunkTextSemantically(payload: SemanticChunkPayload): SemanticChunkResult {
   const { text, maxChunkSizeTokens } = payload;
   const rawBlocks = text.split(/\n\s*\n/).filter(b => b.trim().length > 0);
 
-  const chunks: TextChunk[] = [];
+  const chunks: SemanticChunkResult['chunks'] = [];
   let chunkIndex = 0;
 
   for (const block of rawBlocks) {
     const trimmed = block.trim();
     const tokenEst = Math.ceil(trimmed.split(/\s+/).length * 1.3);
 
-    let type: TextChunk['type'] = 'paragraph';
+    let type: 'heading' | 'paragraph' | 'code' | 'list' = 'paragraph';
     if (trimmed.startsWith('#') || (trimmed.length < 80 && !trimmed.endsWith('.'))) {
       type = 'heading';
     } else if (trimmed.startsWith('```') || trimmed.includes('def ') || trimmed.includes('function ')) {
@@ -346,7 +182,6 @@ export function chunkTextSemantically(payload: SemanticChunkPayload): SemanticCh
     }
 
     if (tokenEst > maxChunkSizeTokens) {
-      // Sub-chunk by sentence
       const sentences = trimmed.split(/(?<=[.!?])\s+/);
       let currentSub = '';
       let currentTokens = 0;

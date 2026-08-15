@@ -14,6 +14,20 @@ const MAX_PAYLOAD_BYTES: usize = 512 * 1024;
 const MAX_CLOCK_DRIFT_MS: u64 = 30_000;
 const MAX_NONCE_CACHE_SIZE: usize = 5_000;
 
+/// Rust-authoritative operation allowlist.
+/// Only these operations may be dispatched to the sidecar.
+const ALLOWED_OPERATIONS: &[&str] = &[
+    "ping",
+    "paraphrase",
+    "translate",
+    "translate_loop",
+    "semantic_chunk",
+    "load_model",
+    "unload_model",
+    "model_status",
+    "embed",
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IPCRequest<T> {
     pub protocol_version: u32,
@@ -158,6 +172,11 @@ impl ProcessSupervisor {
         payload: T,
         timeout_duration: Duration,
     ) -> Result<R, String> {
+        // Rust-authoritative operation allowlist enforcement
+        if !ALLOWED_OPERATIONS.contains(&operation) {
+            return Err(format!("UNSUPPORTED_OPERATION: '{operation}' is not in the Rust operation allowlist"));
+        }
+
         self.spawn_sidecar()?;
 
         let now_ms = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64;

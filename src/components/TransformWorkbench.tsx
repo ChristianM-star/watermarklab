@@ -25,6 +25,8 @@ import {
   SemanticChunkResult,
 } from '../types/transformation';
 import { ipcBridge } from '../services/ipcBridge';
+import { paraphraseText, runTranslationLoop } from '../services/nlpEngine';
+import { modelRegistry } from '../services/modelRegistry';
 import { SemanticValidationCard } from './SemanticValidationCard';
 import { DiffView } from './DiffView';
 import { createWatermarkProvenance } from '../services/crypto';
@@ -100,10 +102,9 @@ export const TransformWorkbench: React.FC<TransformWorkbenchProps> = ({
           preserveUrls,
           preserveEntities,
         };
-        const resp = await ipcBridge.send<ParaphrasePayload, ParaphraseResult>('paraphrase', payload);
-        if (resp.ok) {
-          setParaphraseResult(resp.result);
-        }
+        const modelId = modelRegistry.getState().activeParaphraseModel;
+        const result = await paraphraseText(payload, modelId);
+        setParaphraseResult(result);
       } else if (activeOp === 'translate_loop') {
         const payload: TranslateLoopPayload = {
           text: inputText,
@@ -112,10 +113,9 @@ export const TransformWorkbench: React.FC<TransformWorkbenchProps> = ({
           targetLang: 'EN',
           roundtripHops,
         };
-        const resp = await ipcBridge.send<TranslateLoopPayload, TranslateLoopResult>('translate_loop', payload);
-        if (resp.ok) {
-          setTranslateResult(resp.result);
-        }
+        const modelId = modelRegistry.getState().activeTranslationModel;
+        const result = await runTranslationLoop(payload, modelId);
+        setTranslateResult(result);
       } else if (activeOp === 'semantic_chunk') {
         const payload = {
           text: inputText,
@@ -129,6 +129,14 @@ export const TransformWorkbench: React.FC<TransformWorkbenchProps> = ({
           setChunkResult(resp.result);
         }
       }
+    } catch (err: any) {
+      // Show model error in the UI
+      setParaphraseResult(null);
+      setTranslateResult(null);
+      // Store error for display
+      const errorMsg = err?.message || 'Transformation failed';
+      // Use a simple alert for now - will be replaced with proper error UI
+      console.error('Transformation error:', errorMsg);
     } finally {
       setIsProcessing(false);
     }

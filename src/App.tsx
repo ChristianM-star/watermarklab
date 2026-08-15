@@ -41,6 +41,15 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
+  // Refresh model registry from Rust on initial load
+  useEffect(() => {
+    const refreshModels = async () => {
+      const state = await modelRegistry.refresh();
+      setModelState(state);
+    };
+    void refreshModels();
+  }, []);
+
   useEffect(() => {
     const refreshSecurityStatus = async () => {
       if (typeof window === 'undefined' || !(window as any).__TAURI_INTERNALS__) {

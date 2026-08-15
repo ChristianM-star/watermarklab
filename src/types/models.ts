@@ -1,46 +1,47 @@
 export type ModelOperation = 'paraphrase' | 'translation' | 'embeddings' | 'semantic_chunk';
 
-export type ModelLoadStatus =
-  | 'unverified'
-  | 'verified'
-  | 'offline_cached'
-  | 'loaded_in_memory'
-  | 'unloaded'
-  | 'verifying'
-  | 'tampered'
-  | 'unavailable';
+export type ModelStatus =
+  | 'NOT_INSTALLED'
+  | 'FOUND'
+  | 'HASH_VERIFIED'
+  | 'INCOMPATIBLE'
+  | 'LOAD_FAILED'
+  | 'LOADED'
+  | 'UNLOADED';
 
-export interface ModelEntry {
+export interface ModelRecord {
   logical_id: string;
-  exact_model_identifier: string;
-  model_name: string;
-  model_version: string;
-  format: 'GGUF' | 'ONNX' | 'BIN' | 'SAFE_TENSORS';
+  model_id: string;
+  version: string;
+  format: string;
   quantization: string;
-  sha256: string; // 64-char lowercase hex digest
-  actual_sha256?: string;
+  sha256: string;
+  file_path: string;
   size_bytes: number;
-  size_human: string;
   license: string;
+  supported_operations: string[];
   supported_languages: string[];
-  supported_operations: ModelOperation[];
   context_length: number;
   ram_requirement_mb: number;
   vram_requirement_mb: number;
-  tokenizer_identifier: string;
-  validator_compatibility: string[];
-  status: ModelLoadStatus;
-  isBundled: boolean;
-  filename: string;
-  source: string;
+  status: ModelStatus;
+  verified_digest?: string;
   description: string;
 }
 
+export interface ResourceUsage {
+  loaded_model: string | null;
+  ram_estimate_mb: number;
+  vram_estimate_mb: number;
+  context_size: number;
+  active_requests: number;
+}
+
 export interface ModelRegistryState {
-  models: ModelEntry[];
+  models: ModelRecord[];
   activeParaphraseModel: string;
   activeTranslationModel: string;
-  activeEmbeddingModel: string;
-  totalVramAllocatedMb: number;
-  maxVramBudgetMb: number;
+  loadingModelId: string | null;
+  errorMessage: string | null;
+  resourceUsage: ResourceUsage[];
 }

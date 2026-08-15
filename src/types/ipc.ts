@@ -8,7 +8,14 @@ export type OperationType =
   | 'run_security_audit'
   | 'validate_entities'
   | 'lock_vault'
-  | 'unlock_vault';
+  | 'unlock_vault'
+  | 'load_model'
+  | 'unload_model'
+  | 'model_status'
+  | 'import_model'
+  | 'list_models'
+  | 'get_resource_usage'
+  | 'embed';
 
 export type ErrorCode =
   | 'INVALID_REQUEST'
@@ -28,7 +35,17 @@ export type ErrorCode =
   | 'IPC_FAILURE'
   | 'STORAGE_FAILURE'
   | 'VAULT_LOCKED'
-  | 'UNSUPPORTED_OPERATION';
+  | 'UNSUPPORTED_OPERATION'
+  | 'MODEL_NOT_INSTALLED'
+  | 'MODEL_NOT_VERIFIED'
+  | 'MODEL_NOT_LOADED'
+  | 'MODEL_RESOURCE_LIMIT'
+  | 'MODEL_TIMEOUT'
+  | 'MODEL_UNSUPPORTED_OPERATION'
+  | 'TRANSFORMATION_FAILED'
+  | 'MODEL_DIGEST_NOT_CONFIGURED'
+  | 'MODEL_IMPORT_FAILED'
+  | 'NATIVE_RUNTIME_REQUIRED';
 
 export type DataClassification =
   | 'PUBLIC'
